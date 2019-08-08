@@ -18,7 +18,6 @@ spreadsheet.
 import os
 import re
 import csv
-import sys
 import json
 import shutil
 import base64
@@ -29,11 +28,7 @@ import requests
 import pytesseract
 from PIL import Image
 from lxml import etree
-from lxml import objectify
-from cymon import Cymon
 from bs4 import BeautifulSoup
-
-from . import helpers
 
 
 # Disable requests warnings for things like disabling certificate checking
@@ -52,12 +47,12 @@ class DomainReview(object):
     # API endpoints
     malwaredomains_url = 'http://mirror1.malwaredomains.com/files/justdomains'
     virustotal_domain_report_uri = 'https://www.virustotal.com/vtapi/v2/domain/report?apikey={}&domain={}'
-    get_domain_list_endpoint = 'https://api.namecheap.com/xml.response?ApiUser={}&ApiKey={}&UserName={}&Command=namecheap.domains.getList&ClientIp={}&PageSize={}'
-    get_dns_list_endpoint = 'https://api.namecheap.com/xml.response?ApiUser={}&ApiKey={}&UserName={}&Command=namecheap.domains.dns.getHosts&ClientIp={}&SLD={}&TLD={}'
+    # get_domain_list_endpoint = 'https://api.namecheap.com/xml.response?ApiUser={}&ApiKey={}&UserName={}&Command=namecheap.domains.getList&ClientIp={}&PageSize={}'
+    # get_dns_list_endpoint = 'https://api.namecheap.com/xml.response?ApiUser={}&ApiKey={}&UserName={}&Command=namecheap.domains.dns.getHosts&ClientIp={}&SLD={}&TLD={}'
     # Categories we don't want to see
     # These are lowercase to avoid inconsistencies with how each service might return the categories
-    blacklisted = ['phishing', 'web ads/analytics', 'suspicious', 'shopping', 'placeholders', 
-                   'pornography', 'spam', 'gambling', 'scam/questionable/illegal', 
+    blacklisted = ['phishing', 'web ads/analytics', 'suspicious', 'shopping', 'placeholders',
+                   'pornography', 'spam', 'gambling', 'scam/questionable/illegal',
                    'malicious sources/malnets']
     # Variables for web browsing
     useragent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'
@@ -67,6 +62,7 @@ class DomainReview(object):
 
     def __init__(self):
         """Everything that needs to be setup when a new DomainReview object is created goes here."""
+        '''
         try:
             self.slack_emoji = helpers.config_section_map('Slack')['slack_emoji']
             self.slack_channel = helpers.config_section_map('Slack')['slack_channel']
@@ -78,18 +74,21 @@ class DomainReview(object):
             self.slack_capable = False
             click.secho('[!] Could not load a Slack config from domaincheck.config.', fg='red')
             click.secho('L.. Details: {}'.format(error), fg='red')
+        '''
+
         try:
-            self.client_ip = helpers.config_section_map('Namecheap')['client_ip']
-            self.namecheap_api_key = helpers.config_section_map('Namecheap')['namecheap_api_key']
-            self.namecheap_username = helpers.config_section_map('Namecheap')['namecheap_username']
-            self.virustotal_api_key = helpers.config_section_map('VirusTotal')['virustotal_api_key']
-            self.namecheap_page_size = helpers.config_section_map('Namecheap')['namecheap_page_size']
-            self.namecheap_api_username = helpers.config_section_map('Namecheap')['namecheap_api_username']
+            # self.client_ip = helpers.config_section_map('Namecheap')['client_ip']
+            # self.namecheap_api_key = helpers.config_section_map('Namecheap')['namecheap_api_key']
+            # self.namecheap_username = helpers.config_section_map('Namecheap')['namecheap_username']
+            # self.virustotal_api_key = helpers.config_section_map('VirusTotal')['virustotal_api_key']
+            self.virustotal_api_key = ""
+            # self.namecheap_page_size = helpers.config_section_map('Namecheap')['namecheap_page_size']
+            # self.namecheap_api_username = helpers.config_section_map('Namecheap')['namecheap_api_username']
         except Exception as error:
             click.secho('[!] Could not load all necessary API information from the domaincheck.config.', fg='red')
             click.secho('L.. Details: {}'.format(error), fg='red')
             exit()
-
+    '''
     def get_domain_list(self, csv_file=None):
         """Fetch a list of registered domains for the specified Namecheap account. A valid API key, 
         username, and whitelisted IP address must be used. The returned XML contains entries for
@@ -122,9 +121,10 @@ class DomainReview(object):
         else:
             try:
                 # The Namecheap API call requires both usernames, a key, and a whitelisted IP
-                req = self.session.get(self.get_domain_list_endpoint.format(self.namecheap_api_username, 
-                                    self.namecheap_api_key, self.namecheap_username, self.client_ip, 
-                                    self.namecheap_page_size))
+                req = self.session.get(self.get_domain_list_endpoint.format(self.namecheap_api_username,
+                                                                            self.namecheap_api_key,
+                                                                            self.namecheap_username, self.client_ip,
+                                                                            self.namecheap_page_size))
                 # Check if request returned a 200 OK
                 if req.ok:
                     # Convert Namecheap XML into an easy to use object for iteration
@@ -137,12 +137,15 @@ class DomainReview(object):
                         for domain in root.CommandResponse.DomainGetListResult.Domain:
                             domains_list.append(domain.attrib)
                     elif namecheap_api_result == 'ERROR':
-                        click.secho('[!] Namecheap returned an "ERROR" response, so no domains were returned.', fg='red')
+                        click.secho('[!] Namecheap returned an "ERROR" response, so no domains were returned.',
+                                    fg='red')
                         if 'Invalid request IP' in req.text:
-                            click.secho('L.. You are not connecting to Namecheap using your whitelisted IP address.', fg='red')
+                            click.secho('L.. You are not connecting to Namecheap using your whitelisted IP address.',
+                                        fg='red')
                         click.secho('Full Response:\n{}'.format(req.text), fg='red')
                     else:
-                        click.secho('[!] Namecheap did not return an "OK" response, so no domains were returned.', fg='red')
+                        click.secho('[!] Namecheap did not return an "OK" response, so no domains were returned.',
+                                    fg='red')
                         click.secho('Full Response:\n{}'.format(req.text), fg='red')
                 else:
                     click.secho('[!] Namecheap API request failed. Namecheap did not return a 200 response.', fg='red')
@@ -178,9 +181,10 @@ class DomainReview(object):
         dns_dict = {}
         try:
             # The Namecheap API call requires both usernames, a key, and a whitelisted IP
-            req = self.session.get(self.get_dns_list_endpoint.format(self.namecheap_api_username, 
-                                    self.namecheap_api_key, self.namecheap_username, self.client_ip, 
-                                    domain_name, domain_tld))
+            req = self.session.get(self.get_dns_list_endpoint.format(self.namecheap_api_username,
+                                                                     self.namecheap_api_key, self.namecheap_username,
+                                                                     self.client_ip,
+                                                                     domain_name, domain_tld))
             # Check if request returned a 200 OK
             if req.ok:
                 # Convert Namecheap XML into an easy to use object for iteration
@@ -193,7 +197,8 @@ class DomainReview(object):
                     dns_dict[domain]['Status'] = 'OK'
                     dns_dict[domain]['Records'] = {}
                     for host in root.CommandResponse.DomainDNSGetHostsResult.host:
-                        dns_dict[domain]['Records'][host.attrib['Name']] = "{} {}".format(host.attrib['Type'], host.attrib['Address'])
+                        dns_dict[domain]['Records'][host.attrib['Name']] = "{} {}".format(host.attrib['Type'],
+                                                                                          host.attrib['Address'])
                 elif namecheap_api_result == 'ERROR':
                     dns_dict[domain] = {}
                     dns_dict[domain]['Status'] = 'ERROR'
@@ -207,12 +212,12 @@ class DomainReview(object):
             dns_dict[domain] = {}
             dns_dict[domain]['Status'] = 'ERROR'
         return dns_dict
-    
+
     def get_domain_dns_python(self, domain):
         """Fetch a domain's DNS records using Python DNS instead of the Namecheap API."""
         pass
         # TODO
-
+    '''
     def check_virustotal(self, domain, ignore_case=False):
         """Check the provided domain name with VirusTotal. VirusTotal's API is case sensitive, so
         the domain will be converted to lowercase by default. This can be disabled using the
@@ -233,7 +238,7 @@ class DomainReview(object):
         """Check the provided domain's category as determined by Cisco Talos."""
         categories = []
         cisco_talos_uri = 'https://talosintelligence.com/sb_api/query_lookup?query=%2Fapi%2Fv2%2Fdetails%2Fdomain%2F&query_entry={}&offset=0&order=ip+asc'
-        headers = {'User-Agent': self.useragent, 
+        headers = {'User-Agent': self.useragent,
                    'Referer': 'https://www.talosintelligence.com/reputation_center/lookup?search=' + domain}
         try:
             req = self.session.get(cisco_talos_uri.format(domain), headers=headers)
@@ -248,17 +253,17 @@ class DomainReview(object):
                 click.secho('\n[!] Cisco Talos check request failed. Talos did not return a 200 response.', fg='red')
                 click.secho('L.. Request returned status "{}"'.format(req.status_code), fg='red')
         except Exception as error:
-                click.secho('\n[!] Cisco Talos request failed: {}'.format(error), fg='red')
+            click.secho('\n[!] Cisco Talos request failed: {}'.format(error), fg='red')
         return categories
 
     def check_ibm_xforce(self, domain):
         """Check the provided domain's category as determined by IBM X-Force."""
         categories = []
         xforce_uri = 'https://exchange.xforce.ibmcloud.com/url/{}'.format(domain)
-        headers = {'User-Agent': self.useragent, 
-                   'Accept': 'application/json, text/plain, */*', 
-                   'x-ui': 'XFE', 
-                   'Origin': xforce_uri, 
+        headers = {'User-Agent': self.useragent,
+                   'Accept': 'application/json, text/plain, */*',
+                   'x-ui': 'XFE',
+                   'Origin': xforce_uri,
                    'Referer': xforce_uri}
         xforce_api_uri = 'https://api.xforce.ibmcloud.com/url/{}'.format(domain)
         try:
@@ -287,9 +292,9 @@ class DomainReview(object):
         """Check the provided domain's category as determined by Fortiguard Webfilter."""
         categories = []
         fortiguard_uri = 'https://fortiguard.com/webfilter?q=' + domain
-        headers = {'User-Agent': self.useragent, 
-                   'Origin':'https://fortiguard.com', 
-                   'Referer':'https://fortiguard.com/webfilter'}
+        headers = {'User-Agent': self.useragent,
+                   'Origin': 'https://fortiguard.com',
+                   'Referer': 'https://fortiguard.com/webfilter'}
         try:
             req = self.session.get(fortiguard_uri, headers=headers)
             if req.ok:
@@ -304,7 +309,8 @@ class DomainReview(object):
                 cat = re.findall('Category: (.*?)" />', req.text, re.DOTALL)
                 categories.append(cat[0])
             else:
-                click.secho('\n[!] Fortiguard check request failed. Fortiguard did not return a 200 response.', fg='red')
+                click.secho('\n[!] Fortiguard check request failed. Fortiguard did not return a 200 response.',
+                            fg='red')
                 click.secho('L.. Request returned status "{}"'.format(req.status_code), fg='red')
         except Exception as error:
             click.secho('\n[!] Fortiguard request failed: {}'.format(error), fg='red')
@@ -315,8 +321,8 @@ class DomainReview(object):
         categories = []
         bluecoart_uri = 'https://sitereview.bluecoat.com/resource/lookup'
         post_data = {'url': domain, 'captcha': ''}
-        headers = {'User-Agent': self.useragent, 
-                   'Content-Type': 'application/json; charset=UTF-8', 
+        headers = {'User-Agent': self.useragent,
+                   'Content-Type': 'application/json; charset=UTF-8',
                    'Referer': 'https://sitereview.bluecoat.com/lookup'}
         try:
             response = self.session.post(bluecoart_uri, headers=headers, json=post_data, verify=False)
@@ -332,7 +338,8 @@ class DomainReview(object):
                         b64captcha = base64.urlsafe_b64encode(captcha.encode('utf-8')).decode('utf-8')
                         # Send CAPTCHA solution via GET since inclusion with the domain categorization request doesn't work anymore
                         click.secho('[*] Submitting an OCRed CAPTCHA text to Bluecoat...', fg='yellow')
-                        captcha_solution_url = 'https://sitereview.bluecoat.com/resource/captcha-request/{0}'.format(b64captcha)
+                        captcha_solution_url = 'https://sitereview.bluecoat.com/resource/captcha-request/{0}'.format(
+                            b64captcha)
                         response = self.session.get(url=captcha_solution_url, headers=headers, verify=False)
                         # Try the categorization request again
                         response = self.session.post(url, headers=headers, json=postData, verify=False)
@@ -344,9 +351,13 @@ class DomainReview(object):
                             click.secho('[!] CAPTCHA submission was accepted!', fg='green')
                             categories = response_json['categorization'][0]['name']
                     else:
-                        click.secho('\n[!] Failed to solve BlueCoat CAPTCHA with OCR. Manually solve at: "https://sitereview.bluecoat.com/sitereview.jsp"', fg='red')
+                        click.secho(
+                            '\n[!] Failed to solve BlueCoat CAPTCHA with OCR. Manually solve at: "https://sitereview.bluecoat.com/sitereview.jsp"',
+                            fg='red')
                 else:
-                    click.secho('\n[!] Failed to solve BlueCoat CAPTCHA with OCR. Manually solve at: "https://sitereview.bluecoat.com/sitereview.jsp"', fg='red')
+                    click.secho(
+                        '\n[!] Failed to solve BlueCoat CAPTCHA with OCR. Manually solve at: "https://sitereview.bluecoat.com/sitereview.jsp"',
+                        fg='red')
         except Exception as error:
             click.secho('\n[!] Bluecoat request failed: {0}'.format(error), fg='red')
         return categories
@@ -383,9 +394,9 @@ class DomainReview(object):
         """Check if the provided domain is blacklisted as spam as determined by MX Toolkit."""
         issues = []
         mxtoolbox_url = 'https://mxtoolbox.com/Public/Tools/BrandReputation.aspx'
-        headers = {'User-Agent': self.useragent, 
-                   'Origin': mxtoolbox_url, 
-                   'Referer': mxtoolbox_url}  
+        headers = {'User-Agent': self.useragent,
+                   'Origin': mxtoolbox_url,
+                   'Referer': mxtoolbox_url}
         try:
             response = self.session.get(url=mxtoolbox_url, headers=headers)
             soup = BeautifulSoup(response.content, 'lxml')
@@ -393,25 +404,25 @@ class DomainReview(object):
             viewstategenerator = soup.select('input[name=__VIEWSTATEGENERATOR]')[0]['value']
             eventvalidation = soup.select('input[name=__EVENTVALIDATION]')[0]['value']
             data = {
-                    '__EVENTTARGET':'', 
-                    '__EVENTARGUMENT':'', 
-                    '__VIEWSTATE':viewstate, 
-                    '__VIEWSTATEGENERATOR':viewstategenerator, 
-                    '__EVENTVALIDATION':eventvalidation, 
-                    'ctl00$ContentPlaceHolder1$brandReputationUrl':domain, 
-                    'ctl00$ContentPlaceHolder1$brandReputationDoLookup':'Brand Reputation Lookup', 
-                    'ctl00$ucSignIn$hfRegCode':'missing', 
-                    'ctl00$ucSignIn$hfRedirectSignUp':'/Public/Tools/BrandReputation.aspx', 
-                    'ctl00$ucSignIn$hfRedirectLogin':'', 
-                    'ctl00$ucSignIn$txtEmailAddress':'', 
-                    'ctl00$ucSignIn$cbNewAccount':'cbNewAccount', 
-                    'ctl00$ucSignIn$txtFullName':'', 
-                    'ctl00$ucSignIn$txtModalNewPassword':'', 
-                    'ctl00$ucSignIn$txtPhone':'', 
-                    'ctl00$ucSignIn$txtCompanyName':'', 
-                    'ctl00$ucSignIn$drpTitle':'', 
-                    'ctl00$ucSignIn$txtTitleName':'', 
-                    'ctl00$ucSignIn$txtModalPassword':''
+                '__EVENTTARGET': '',
+                '__EVENTARGUMENT': '',
+                '__VIEWSTATE': viewstate,
+                '__VIEWSTATEGENERATOR': viewstategenerator,
+                '__EVENTVALIDATION': eventvalidation,
+                'ctl00$ContentPlaceHolder1$brandReputationUrl': domain,
+                'ctl00$ContentPlaceHolder1$brandReputationDoLookup': 'Brand Reputation Lookup',
+                'ctl00$ucSignIn$hfRegCode': 'missing',
+                'ctl00$ucSignIn$hfRedirectSignUp': '/Public/Tools/BrandReputation.aspx',
+                'ctl00$ucSignIn$hfRedirectLogin': '',
+                'ctl00$ucSignIn$txtEmailAddress': '',
+                'ctl00$ucSignIn$cbNewAccount': 'cbNewAccount',
+                'ctl00$ucSignIn$txtFullName': '',
+                'ctl00$ucSignIn$txtModalNewPassword': '',
+                'ctl00$ucSignIn$txtPhone': '',
+                'ctl00$ucSignIn$txtCompanyName': '',
+                'ctl00$ucSignIn$drpTitle': '',
+                'ctl00$ucSignIn$txtTitleName': '',
+                'ctl00$ucSignIn$txtModalPassword': ''
             }
             response = self.session.post(url=mxtoolbox_url, headers=headers, data=data)
             soup = BeautifulSoup(response.content, 'lxml')
@@ -452,7 +463,7 @@ class DomainReview(object):
         try:
             response = self.session.get(opendns_uri.format(domain), headers=headers, verify=False)
             soup = BeautifulSoup(response.content, 'lxml')
-            tags = soup.find('span', {'class':'normal'})
+            tags = soup.find('span', {'class': 'normal'})
             if tags:
                 categories = tags.text.strip().split(', ')
             else:
@@ -469,29 +480,29 @@ class DomainReview(object):
         trendmicro_stage_2_uri = 'https://global.sitesafety.trendmicro.com/result.php'
         headers = {'User-Agent': self.useragent}
         headers_stage_1 = {
-                           'Host': 'global.sitesafety.trendmicro.com', 
-                           'Accept': '*/*', 
-                           'Origin': 'https://global.sitesafety.trendmicro.com', 
-                           'X-Requested-With': 'XMLHttpRequest', 
-                           'User-Agent': self.useragent, 
-                           'Content-Type': 'application/x-www-form-urlencoded', 
-                           'Referer': 'https://global.sitesafety.trendmicro.com/index.php', 
-                           'Accept-Encoding': 'gzip, deflate', 
-                           'Accept-Language': 'en-US, en;q=0.9'
-                          }
+            'Host': 'global.sitesafety.trendmicro.com',
+            'Accept': '*/*',
+            'Origin': 'https://global.sitesafety.trendmicro.com',
+            'X-Requested-With': 'XMLHttpRequest',
+            'User-Agent': self.useragent,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Referer': 'https://global.sitesafety.trendmicro.com/index.php',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'en-US, en;q=0.9'
+        }
         headers_stage_2 = {
-                           'Origin': 'https://global.sitesafety.trendmicro.com', 
-                           'Content-Type': 'application/x-www-form-urlencoded', 
-                           'User-Agent': self.useragent, 
-                           'Accept': 'text/html, application/xhtml+xml, application/xml;q=0.9, image/webp, image/apng, */*;q=0.8', 
-                           'Referer': 'https://global.sitesafety.trendmicro.com/index.php', 
-                           'Accept-Encoding': 'gzip, deflate', 
-                           'Accept-Language': 'en-US, en;q=0.9'
-                          }
+            'Origin': 'https://global.sitesafety.trendmicro.com',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': self.useragent,
+            'Accept': 'text/html, application/xhtml+xml, application/xml;q=0.9, image/webp, image/apng, */*;q=0.8',
+            'Referer': 'https://global.sitesafety.trendmicro.com/index.php',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'en-US, en;q=0.9'
+        }
         data_stage_1 = {'url': domain}
-        data_stage_2 = {'urlname': domain, 
+        data_stage_2 = {'urlname': domain,
                         'getinfo': 'Check Now'
-                       }
+                        }
         try:
             response = self.session.get(trendmicro_uri, headers=headers)
             response = self.session.post(trendmicro_stage_1_uri, headers=headers_stage_1, data=data_stage_1)
@@ -499,10 +510,11 @@ class DomainReview(object):
             # Check if session was redirected to /captcha.php
             if 'captcha' in response.url:
                 click.secho('[!] TrendMicro responded with a reCAPTCHA, so cannot proceed with TrendMicro.', fg='red')
-                click.secho('L.. You can try solving it yourself: https://global.sitesafety.trendmicro.com/captcha.php', fg='red')
+                click.secho('L.. You can try solving it yourself: https://global.sitesafety.trendmicro.com/captcha.php',
+                            fg='red')
             else:
                 soup = BeautifulSoup(response.content, 'lxml')
-                tags = soup.find('div', {'class':'labeltitlesmallresult'})
+                tags = soup.find('div', {'class': 'labeltitlesmallresult'})
                 if tags:
                     categories = tags.text.strip().split(', ')
                 else:
@@ -519,12 +531,13 @@ class DomainReview(object):
         if response.status_code == 200:
             return malware_domains
         else:
-            click.secho('[!] Error reaching: {}, Status: {}'.format(self.malwaredomains_url, response.status_code), fg='red')
+            click.secho('[!] Error reaching: {}, Status: {}'.format(self.malwaredomains_url, response.status_code),
+                        fg='red')
             return None
 
     def check_domain_status(self, domains_list, filter_list=None):
         """Check the status of each domain in the provided list collected from Namecheap's domainList
-        API. Each domain will be checked to ensure WHOIS privacy is enabled, the domain has not expired, 
+        API. Each domain will be checked to ensure WHOIS privacy is enabled, the domain has not expired,
         and the domain is not flagged/blacklisted. A domain will be considered burned if VirusTotal
         returns detections for the domain or one of the domain's categories appears in the list of
         bad categories.
@@ -537,8 +550,8 @@ class DomainReview(object):
             num_of_domains = len(domains_list)
         lab_results = {}
         malware_domains = self.download_malware_domains()
-        with click.progressbar(domains_list, 
-                               label='Checking domains', 
+        with click.progressbar(domains_list,
+                               label='Checking domains',
                                length=num_of_domains) as bar:
             for item in bar:
                 domain = item['Name']
@@ -569,7 +582,9 @@ class DomainReview(object):
                 # Check if domain is flagged for malware
                 if malware_domains:
                     if domain in malware_domains:
-                        click.secho('\n[!] {}: Identified as a known malware domain (malwaredomains.com)!'.format(domain), fg='red')
+                        click.secho(
+                            '\n[!] {}: Identified as a known malware domain (malwaredomains.com)!'.format(domain),
+                            fg='red')
                         burned = True
                         health = 'Burned'
                         burned_explanations.append('Flagged by malwaredomains.com')
@@ -580,13 +595,15 @@ class DomainReview(object):
                 # Check if VirusTotal has any detections for URLs or samples
                 if 'detected_downloaded_samples' in vt_results:
                     if len(vt_results['detected_downloaded_samples']) > 0:
-                        click.secho('\n[!] {}: Identified as having a downloaded sample on VirusTotal!'.format(domain), fg='red')
+                        click.secho('\n[!] {}: Identified as having a downloaded sample on VirusTotal!'.format(domain),
+                                    fg='red')
                         burned = True
                         health = 'Burned'
                         burned_explanations.append('Tied to a VirusTotal detected malware sample')
                 if 'detected_urls' in vt_results:
                     if len(vt_results['detected_urls']) > 0:
-                        click.secho('\n[!] {}: Identified as having a URL detection on VirusTotal!'.format(domain), fg='red')
+                        click.secho('\n[!] {}: Identified as having a URL detection on VirusTotal!'.format(domain),
+                                    fg='red')
                         burned = True
                         health = 'Burned'
                         burned_explanations.append('Tied to a VirusTotal detected URL')
@@ -594,14 +611,17 @@ class DomainReview(object):
                 ip_addresses = []
                 if 'resolutions' in vt_results:
                     for address in vt_results['resolutions']:
-                        ip_addresses.append({'address':address['ip_address'], 'timestamp':address['last_resolved'].split(" ")[0]})
+                        ip_addresses.append(
+                            {'address': address['ip_address'], 'timestamp': address['last_resolved'].split(" ")[0]})
                 bad_addresses = []
                 for address in ip_addresses:
                     if self.check_cymon(address['address']):
                         burned_dns = True
                         bad_addresses.append(address['address'] + '/' + address['timestamp'])
                 if burned_dns:
-                    click.secho('\n[*] {}: Identified as pointing to suspect IP addresses (VirusTotal passive DNS).'.format(domain), fg='yellow')
+                    click.secho(
+                        '\n[*] {}: Identified as pointing to suspect IP addresses (VirusTotal passive DNS).'.format(
+                            domain), fg='yellow')
                     health_dns = 'Flagged DNS ({})'.format(', '.join(bad_addresses))
                 # Collect categories from the other sources
                 xforce_results = self.check_ibm_xforce(domain)
@@ -626,7 +646,8 @@ class DomainReview(object):
                     if category.lower() in self.blacklisted:
                         bad_cats.append(category.capitalize())
                 if bad_cats:
-                    click.secho('\n[!] {}: is tagged with a bad category, {}!'.format(domain, ', '.join(bad_cats)), fg='red')
+                    click.secho('\n[!] {}: is tagged with a bad category, {}!'.format(domain, ', '.join(bad_cats)),
+                                fg='red')
                     burned = True
                     health = 'Burned'
                     burned_explanations.append('Tagged with a bad category')
@@ -666,7 +687,7 @@ class DomainReview(object):
                        'Creation', 'Expiration', 'All', 'IBM X-Force', 'Talos', 'Bluecoat',
                        'Fortiguard', 'OpenDNS', 'TrendMicro', 'MX Toolbox', 'Note']
         with open('domain_health.csv', mode='w') as report:
-            report_writer = csv.writer(report, delimiter=',' , quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            report_writer = csv.writer(report, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             report_writer.writerow(csv_headers)
             for domain in lab_results:
                 health = lab_results[domain]['health']
@@ -723,7 +744,7 @@ class DomainReview(object):
                                         ', '.join(fortiguard), ', '.join(opendns),
                                         ', '.join(trendmicro), ', '.join(mxtoolbox),
                                         burned_explanations]
-                                      )
+                                       )
 
     def print_confluence_table(self, lab_results):
         """Accepts the results from check_domain_status() and generates a table of results using
@@ -810,12 +831,12 @@ class DomainReview(object):
                 dns_records = ['NO RESULTS']
 
             click.secho('|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|'.format(
-                        domain, health, health_dns, ', '.join(dns_records), whois,
-                        creation, expiration, ', '.join(parsed_cats), ', '.join(xforce),
-                        ', '.join(talos), ', '.join(bluecoat), ', '.join(fortiguard),
-                        ', '.join(opendns), ', '.join(trendmicro), ', '.join(mxtoolbox)),
-                        fg='yellow')
-
+                domain, health, health_dns, ', '.join(dns_records), whois,
+                creation, expiration, ', '.join(parsed_cats), ', '.join(xforce),
+                ', '.join(talos), ', '.join(bluecoat), ', '.join(fortiguard),
+                ', '.join(opendns), ', '.join(trendmicro), ', '.join(mxtoolbox)),
+                fg='yellow')
+    '''
     def generate_monitor_message(self, lab_results, slack):
         """Accepts the results of check_domain_status() and generate a Slack messages for any
         burned domains.
@@ -840,11 +861,14 @@ class DomainReview(object):
                 if not message == '':
                     message = self.slack_alert_target + ' ' + message
                     slack_data = {
-                                  'text': message,
-                                  'username': self.slack_username,
-                                  'icon_emoji': self.slack_emoji,
-                                  'channel': self.slack_channel
-                                }
-                    response = requests.post(self.slack_webhook_url, data=json.dumps(slack_data), headers={'Content-Type': 'application/json'})
+                        'text': message,
+                        'username': self.slack_username,
+                        'icon_emoji': self.slack_emoji,
+                        'channel': self.slack_channel
+                    }
+                    response = requests.post(self.slack_webhook_url, data=json.dumps(slack_data),
+                                             headers={'Content-Type': 'application/json'})
                     if response.status_code != 200:
-                        click.secho('[!] Request to slack returned an error %s, the response is:\n%s' % (response.status_code, response.text), fg='red')
+                        click.secho('[!] Request to slack returned an error %s, the response is:\n%s' % (
+                        response.status_code, response.text), fg='red')
+    '''
