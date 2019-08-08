@@ -2,16 +2,17 @@
 # -*- coding: utf-8 -*-
 
 from lib.review import DomainReview
+import sys
 
 
-def domaincheck(domain):
-    lab_results = []
+def domaincheck(domain, vt_api):
+    lab_results = {}
     domain_categories = []
     burned_explanations = []
     burned_dns = False
     health = 'Healthy'
     health_dns = 'Healthy'
-    dr = DomainReview("")
+    dr = DomainReview(vt_api)
     malware_domains = dr.download_malware_domains()
 
     # Check if domain is flagged for malware
@@ -108,4 +109,20 @@ def test(domain):
 
 
 if __name__ == "__main__":
-    domaincheck("qianxin.com")
+    vt_api = ""
+    result = domaincheck(sys.argv[1], vt_api)
+    print(f'''Domain: {sys.argv[1]}
+[*] Categories [*]
+[-]   Talos: {result['categories']['talos'][0]}
+[-]   xforce: {result['categories']['xforce'][0]}
+[-]   opendns: {result['categories']['opendns'][0]}
+[-]   bluecoat: {result['categories']['bluecoat'][0]}
+[-]   mxtoolbox: {result['categories']['mxtoolbox'][0]}
+[-]   trendmicro: {result['categories']['trendmicro'][0]}
+[-]   fortiguard: {result['categories']['fortiguard'][0]}
+[*] Health [*]
+[-]   {result['health']}
+[*] explanation [*]
+[-]   {'|-|'.join(result['burned_explanation'])} 
+[*] health dns [*]
+[-]   {result['health_dns']}''')
