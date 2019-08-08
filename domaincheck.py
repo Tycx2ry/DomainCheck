@@ -11,7 +11,8 @@ def domaincheck(domain):
     burned_dns = False
     health = 'Healthy'
     health_dns = 'Healthy'
-    malware_domains = DomainReview.download_malware_domains()
+    dr = DomainReview("")
+    malware_domains = dr.download_malware_domains()
 
     # Check if domain is flagged for malware
     if malware_domains:
@@ -20,7 +21,7 @@ def domaincheck(domain):
             burned_explanations.append('Flagged by malwaredomains.com')
 
     # Check domain name with VirusTotal
-    vt_results = DomainReview.check_virustotal(domain)
+    vt_results = dr.check_virustotal(domain)
     if 'categories' in vt_results:
         domain_categories = vt_results['categories']
 
@@ -42,32 +43,32 @@ def domaincheck(domain):
                 {'address': address['ip_address'], 'timestamp': address['last_resolved'].split(" ")[0]})
     bad_addresses = []
     for address in ip_addresses:
-        if DomainReview.check_cymon(address['address']):
+        if dr.check_cymon(address['address']):
             burned_dns = True
             bad_addresses.append(address['address'] + '/' + address['timestamp'])
     if burned_dns:
         health_dns = 'Flagged DNS ({})'.format(', '.join(bad_addresses))
 
     # Collect categories from the other sources
-    xforce_results = DomainReview.check_ibm_xforce(domain)
+    xforce_results = dr.check_ibm_xforce(domain)
     domain_categories.extend(xforce_results)
 
-    talos_results = DomainReview.check_talos(domain)
+    talos_results = dr.check_talos(domain)
     domain_categories.extend(talos_results)
 
-    bluecoat_results = DomainReview.check_bluecoat(domain)
+    bluecoat_results = dr.check_bluecoat(domain)
     domain_categories.extend(bluecoat_results)
 
-    fortiguard_results = DomainReview.check_fortiguard(domain)
+    fortiguard_results = dr.check_fortiguard(domain)
     domain_categories.extend(fortiguard_results)
 
-    opendns_results = DomainReview.check_opendns(domain)
+    opendns_results = dr.check_opendns(domain)
     domain_categories.extend(opendns_results)
 
-    trendmicro_results = DomainReview.check_trendmicro(domain)
+    trendmicro_results = dr.check_trendmicro(domain)
     domain_categories.extend(trendmicro_results)
 
-    mxtoolbox_results = DomainReview.check_mxtoolbox(domain)
+    mxtoolbox_results = dr.check_mxtoolbox(domain)
     domain_categories.extend(domain_categories)
 
     # Make categories unique

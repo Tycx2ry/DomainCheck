@@ -35,7 +35,7 @@ from bs4 import BeautifulSoup
 requests.packages.urllib3.disable_warnings()
 
 
-class DomainReview(object):
+class DomainReview:
     """Class to pull a list of registered domains belonging to a Namecheap account and then check
     the web reputation of each domain.
     """
@@ -60,7 +60,7 @@ class DomainReview(object):
     # Additional settings
     request_delay = 20
 
-    def __init__(self):
+    def __init__(self, virustotal_api_key):
         """Everything that needs to be setup when a new DomainReview object is created goes here."""
         '''
         try:
@@ -81,7 +81,7 @@ class DomainReview(object):
             # self.namecheap_api_key = helpers.config_section_map('Namecheap')['namecheap_api_key']
             # self.namecheap_username = helpers.config_section_map('Namecheap')['namecheap_username']
             # self.virustotal_api_key = helpers.config_section_map('VirusTotal')['virustotal_api_key']
-            self.virustotal_api_key = ""
+            self.virustotal_api_key = virustotal_api_key
             # self.namecheap_page_size = helpers.config_section_map('Namecheap')['namecheap_page_size']
             # self.namecheap_api_username = helpers.config_section_map('Namecheap')['namecheap_api_username']
         except Exception as error:
