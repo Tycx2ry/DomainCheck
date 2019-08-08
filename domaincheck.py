@@ -123,6 +123,6 @@ if __name__ == "__main__":
 [*] Health [*]
 [-]   {result['health']}
 [*] explanation [*]
-[-]   {'|-|'.join(result['burned_explanation'])} 
+[-]   {result['burned_explanation']} 
 [*] health dns [*]
 [-]   {result['health_dns']}''')
