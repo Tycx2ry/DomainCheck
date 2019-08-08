@@ -102,5 +102,10 @@ def domaincheck(domain):
     return lab_results[domain]
 
 
+def test(domain):
+    dr = DomainReview("")
+    print(dr.check_bluecoat(domain))
+
+
 if __name__ == "__main__":
-    domaincheck("")
+    domaincheck("qianxin.com")

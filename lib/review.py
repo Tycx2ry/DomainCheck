@@ -319,11 +319,31 @@ class DomainReview:
     def check_bluecoat(self, domain, ocr=True):
         """Check the provided domain's category as determined by Symantec Bluecoat."""
         categories = []
+        sitereview_uri = 'https://sitereview.bluecoat.com/'
+        headers = {'User-Agent': self.useragent,
+                   'Content-Type': 'application/json; charset=UTF-8'}
+        try:
+            response = self.session.get(sitereview_uri, headers=headers, verify=False)
+        except Exception as error:
+            click.secho('\n[!] Bluecoat request failed: {0}'.format(error), fg='red')
+
+        captcha_request_uri = 'https://sitereview.bluecoat.com/resource/captcha-request'
+        post_data = {'check': "captcha"}
+        headers = {'User-Agent': self.useragent,
+                   'Content-Type': 'application/json; charset=UTF-8',
+                   'Referer': 'https://sitereview.bluecoat.com/',
+                   'Origin': 'https://sitereview.bluecoat.com'}
+        try:
+            response = self.session.post(captcha_request_uri, headers=headers, json=post_data, verify=False)
+        except Exception as error:
+            click.secho('\n[!] Bluecoat request failed: {0}'.format(error), fg='red')
+
         bluecoart_uri = 'https://sitereview.bluecoat.com/resource/lookup'
         post_data = {'url': domain, 'captcha': ''}
         headers = {'User-Agent': self.useragent,
+                   'X-XSRF-TOKEN': response.request.headers['Cookie'].split('=')[-1],
                    'Content-Type': 'application/json; charset=UTF-8',
-                   'Referer': 'https://sitereview.bluecoat.com/lookup'}
+                   'Referer': 'https://sitereview.bluecoat.com/'}
         try:
             response = self.session.post(bluecoart_uri, headers=headers, json=post_data, verify=False)
             root = etree.fromstring(response.text)
